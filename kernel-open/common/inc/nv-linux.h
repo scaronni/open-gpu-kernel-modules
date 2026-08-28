@@ -1255,6 +1255,11 @@ typedef struct nv_linux_state_s {
 
     nv_work_t work;
 
+    NvBool pcie_endpoint_hasd_set;
+    NvBool pcie_speed_locked;
+    NvBool pcie_tunneled;
+    NvBool pcie_upstream_hasd_set;
+
     /* get a timer callback every second */
     struct nv_timer rc_timer;
 

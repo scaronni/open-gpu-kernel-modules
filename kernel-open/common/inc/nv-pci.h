@@ -50,6 +50,8 @@ NvBool nv_pci_has_common_pci_switch(nv_state_t *nv, struct pci_dev *);
 NV_STATUS nv_pci_find_nvidia_dvsec_capability(struct pci_dev *, NvU16,
                                               NvU32 *, NvU32 *);
 void nv_pci_tegra_boost_clocks(struct device *dev);
+int nv_pci_begin_active_epoch(nv_linux_state_t *nvl);
+void nv_pci_end_active_epoch(nv_linux_state_t *nvl);
 
 #define NV_PCI_EXT_CAP_START_OFFSET         0x100
 #define NV_PCI_EXT_CAP_END_OFFSET           0x1000

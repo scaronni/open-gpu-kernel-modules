@@ -62,6 +62,101 @@
 
 extern int NVreg_ExcludeAllGpus;
 
+int nv_pci_begin_active_epoch(nv_linux_state_t *nvl)
+{
+#if NV_IS_EXPORT_SYMBOL_GPL_pcie_set_target_speed
+    struct pci_dev *upstream;
+    enum pci_bus_speed achieved;
+    enum pci_bus_speed requested;
+    u16 endpoint_lnkctl2;
+    u16 upstream_lnkctl2;
+    int ret;
+
+    if (!nvl->pcie_tunneled || nvl->pcie_speed_locked ||
+        !((NV_STATE_PTR(nvl))->flags &
+          (NV_FLAG_INITIALIZED | NV_FLAG_PERSISTENT_SW_STATE)))
+        return 0;
+
+    upstream = pci_upstream_bridge(nvl->pci_dev);
+    if (!upstream || !upstream->subordinate)
+        return -ENODEV;
+
+    requested = upstream->subordinate->max_bus_speed;
+    if (requested < PCIE_SPEED_2_5GT || requested > PCIE_SPEED_64_0GT)
+        return -EINVAL;
+
+    if (pcie_capability_read_word(nvl->pci_dev, PCI_EXP_LNKCTL2,
+                                  &endpoint_lnkctl2) ||
+        pcie_capability_read_word(upstream, PCI_EXP_LNKCTL2,
+                                  &upstream_lnkctl2))
+        return -EIO;
+
+    nvl->pcie_endpoint_hasd_set =
+        !(endpoint_lnkctl2 & PCI_EXP_LNKCTL2_HASD);
+    nvl->pcie_upstream_hasd_set =
+        !(upstream_lnkctl2 & PCI_EXP_LNKCTL2_HASD);
+
+    /*
+     * Stop GSP's autonomous policy at both ends before asking PCI core to
+     * negotiate.  HASD does not block software-directed or error-recovery
+     * retraining.
+     */
+    if ((nvl->pcie_endpoint_hasd_set &&
+         pcie_capability_set_word(nvl->pci_dev, PCI_EXP_LNKCTL2,
+                                  PCI_EXP_LNKCTL2_HASD)) ||
+        (nvl->pcie_upstream_hasd_set &&
+         pcie_capability_set_word(upstream, PCI_EXP_LNKCTL2,
+                                  PCI_EXP_LNKCTL2_HASD))) {
+        ret = -EIO;
+        goto failed;
+    }
+
+    /*
+     * Make one attempt at the maximum supported speed.  A lower speed after
+     * that retrain is the link's achieved speed for this active epoch; do not
+     * trigger further fallback retrains.
+     */
+    ret = pcie_set_target_speed(upstream, requested, true);
+    achieved = upstream->subordinate->cur_bus_speed;
+    if (ret && ret != -EAGAIN)
+        goto failed;
+
+    nvl->pcie_speed_locked = NV_TRUE;
+    NV_DEV_PRINTF(NV_DBG_SETUP, NV_STATE_PTR(nvl),
+                  "Tunneled PCIe active epoch requested %#x, achieved %#x\n",
+                  requested, achieved);
+    return 0;
+
+failed:
+    nv_pci_end_active_epoch(nvl);
+    return ret;
+#else
+    return 0;
+#endif
+}
+
+void nv_pci_end_active_epoch(nv_linux_state_t *nvl)
+{
+#if NV_IS_EXPORT_SYMBOL_GPL_pcie_set_target_speed
+    struct pci_dev *upstream;
+
+    if (!nvl->pcie_tunneled)
+        return;
+
+    upstream = pci_upstream_bridge(nvl->pci_dev);
+    if (nvl->pcie_endpoint_hasd_set)
+        pcie_capability_clear_word(nvl->pci_dev, PCI_EXP_LNKCTL2,
+                                   PCI_EXP_LNKCTL2_HASD);
+    if (upstream && nvl->pcie_upstream_hasd_set)
+        pcie_capability_clear_word(upstream, PCI_EXP_LNKCTL2,
+                                   PCI_EXP_LNKCTL2_HASD);
+
+    nvl->pcie_endpoint_hasd_set = NV_FALSE;
+    nvl->pcie_speed_locked = NV_FALSE;
+    nvl->pcie_upstream_hasd_set = NV_FALSE;
+#endif
+}
+
 static void
 nv_check_and_exclude_gpu(
     nvidia_stack_t *sp,
@@ -1250,6 +1345,10 @@ nv_pci_probe_body
         goto err_not_supported;
     }
 
+#if NV_IS_EXPORT_SYMBOL_GPL_pcie_set_target_speed
+    nvl->pcie_tunneled = pci_is_thunderbolt_attached(pci_dev);
+#endif
+
     nv  = NV_STATE_PTR(nvl);
     atomic_set(&nvl->tdisp_aer_reported, 0);
     os_mem_copy(nv->cached_gpu_info.vbios_version, "??.??.??.??.??", 15);
@@ -1595,6 +1694,10 @@ nv_pci_probe_body
 
     nvidia_modeset_probe(nvl);
 
+    if (nv_pci_begin_active_epoch(nvl) != 0)
+        NV_DEV_PRINTF(NV_DBG_ERRORS, nv,
+                      "Failed to negotiate tunneled PCIe link at startup\n");
+
     /*
      * Dynamic power management should be enabled as the last step.
      * Kernel runtime power management framework can put the device
@@ -1752,6 +1855,8 @@ static void nv_pci_remove_helper(struct pci_dev *pci_dev, bool block_if_gpu_in_u
     {
         return;
     }
+
+    nv_pci_end_active_epoch(nvl);
 
     nv = NV_STATE_PTR(nvl);
 
