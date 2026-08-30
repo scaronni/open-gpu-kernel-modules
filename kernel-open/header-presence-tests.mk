@@ -5,6 +5,7 @@ NV_HEADER_PRESENCE_TESTS = \
   drm/drm_hdcp.h \
   drm/display/drm_hdcp.h \
   drm/display/drm_hdcp_helper.h \
+  drm/display/drm_dp_helper.h \
   drm/drmP.h \
   drm/drm_aperture.h \
   drm/drm_atomic_state_helper.h \
@@ -52,4 +53,3 @@ NV_HEADER_PRESENCE_TESTS = \
   linux/iommu-dma.h \
   linux/nvgrace-egm.h \
   linux/sysfb.h
-

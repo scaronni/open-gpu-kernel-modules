@@ -270,6 +270,7 @@ enum NvKmsIoctlCommand {
     NVKMS_IOCTL_FRAMEBUFFER_CONSOLE_DISABLED,
     NVKMS_IOCTL_REGISTER_VBLANK_INTR_CALLBACK,
     NVKMS_IOCTL_UNREGISTER_VBLANK_INTR_CALLBACK,
+    NVKMS_IOCTL_DP_AUX_TRANSFER,
 };
 
 
@@ -1572,6 +1573,40 @@ struct NvKmsQueryDpyDynamicDataRequest {
         NvU16 bufferSize;
         NvU8 buffer[NVKMS_EDID_BUFFER_SIZE];
     } edid;
+};
+
+/*
+ * NVKMS_IOCTL_DP_AUX_TRANSFER: Perform a native DisplayPort AUX
+ * transaction for the specified display.
+ */
+
+#define NVKMS_DP_AUX_MAX_DATA_SIZE 16
+
+enum NvKmsDpAuxReply {
+    NVKMS_DP_AUX_REPLY_ACK,
+    NVKMS_DP_AUX_REPLY_NACK,
+    NVKMS_DP_AUX_REPLY_DEFER,
+};
+
+struct NvKmsDpAuxTransferRequest {
+    NvKmsDeviceHandle deviceHandle;
+    NvKmsDispHandle dispHandle;
+    NVDpyId dpyId;
+    NvU32 address;
+    NvU8 size;
+    NvBool write;
+    NvU8 data[NVKMS_DP_AUX_MAX_DATA_SIZE];
+};
+
+struct NvKmsDpAuxTransferReply {
+    NvU8 size;
+    enum NvKmsDpAuxReply reply;
+    NvU8 data[NVKMS_DP_AUX_MAX_DATA_SIZE];
+};
+
+struct NvKmsDpAuxTransferParams {
+    struct NvKmsDpAuxTransferRequest request; /*! in */
+    struct NvKmsDpAuxTransferReply reply;     /*! out */
 };
 
 typedef struct _NvKmsDpyOutputColorFormatInfo {
@@ -3211,6 +3246,11 @@ struct NvKmsEventDpyChanged {
     NVDpyId dpyId;
 };
 
+struct NvKmsEventDpCecIrq {
+    NvKmsDeviceHandle deviceHandle;
+    NVDpyId dpyId;
+};
+
 
 /*!
  * NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED
@@ -3314,6 +3354,7 @@ struct NvKmsEvent {
         struct NvKmsEventFlipOccurred flipOccurred;
         struct NvKmsEventDpyCpChanged dpyCpChanged;
         struct NvKmsEventDpyCpTopologyChanged dpyCpTopologyChanged;
+        struct NvKmsEventDpCecIrq dpCecIrq;
     } u;
 };
 

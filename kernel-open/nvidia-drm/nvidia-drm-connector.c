@@ -50,6 +50,68 @@
 static void nv_drm_connector_set_allm_capable(struct nv_drm_connector *nv_connector,
                                               NvBool allmCapable);
 
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+#include <drm/display/drm_dp_helper.h>
+#endif
+
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+static ssize_t nv_drm_dp_aux_transfer(struct drm_dp_aux *aux,
+                                      struct drm_dp_aux_msg *msg)
+{
+    struct nv_drm_connector *nv_connector =
+        container_of(aux, struct nv_drm_connector, aux);
+    struct nv_drm_device *nv_dev = to_nv_device(nv_connector->base.dev);
+    struct NvKmsKapiDpAuxTransferParams params = { };
+
+    if ((nv_connector->nv_detected_encoder == NULL) ||
+        (nvKms->dpAuxTransfer == NULL) ||
+        (msg->size == 0U) ||
+        (msg->size > NVKMS_KAPI_DP_AUX_MAX_DATA_SIZE)) {
+        return -EIO;
+    }
+
+    switch (msg->request & ~DP_AUX_I2C_MOT) {
+    case DP_AUX_NATIVE_READ:
+        params.write = NV_FALSE;
+        break;
+    case DP_AUX_NATIVE_WRITE:
+        params.write = NV_TRUE;
+        break;
+    default:
+        return -EOPNOTSUPP;
+    }
+
+    params.display = nv_connector->nv_detected_encoder->hDisplay;
+    params.address = msg->address;
+    params.size = msg->size;
+    if (params.write) {
+        memcpy(params.data, msg->buffer, msg->size);
+    }
+
+    if (!nvKms->dpAuxTransfer(nv_dev->pDevice, &params)) {
+        return -EIO;
+    }
+
+    switch (params.reply) {
+    case NVKMS_KAPI_DP_AUX_REPLY_ACK:
+        msg->reply = DP_AUX_NATIVE_REPLY_ACK;
+        if (!params.write && params.size != 0U) {
+            memcpy(msg->buffer, params.data, params.size);
+        }
+        break;
+    case NVKMS_KAPI_DP_AUX_REPLY_DEFER:
+        msg->reply = DP_AUX_NATIVE_REPLY_DEFER;
+        break;
+    case NVKMS_KAPI_DP_AUX_REPLY_NACK:
+    default:
+        msg->reply = DP_AUX_NATIVE_REPLY_NACK;
+        break;
+    }
+
+    return params.size;
+}
+#endif
+
 /*
  * Dithering support requires connector atomic_check, which we only enable on
  * kernels with HDR metadata support (v5.14+). This serves as a proxy for
@@ -143,6 +205,13 @@ nv_drm_connector_translate_output_bpc(enum nv_drm_connector_output_bpc bpc,
 static void nv_drm_connector_destroy(struct drm_connector *connector)
 {
     struct nv_drm_connector *nv_connector = to_nv_connector(connector);
+
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    if ((nv_connector->type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        drm_dp_cec_unregister_connector(&nv_connector->aux);
+    }
+#endif
 
     drm_connector_unregister(connector);
 
@@ -300,6 +369,13 @@ static enum drm_connector_status __nv_drm_connector_detect_internal(
 
     nv_connector->nv_detected_encoder = nv_detected_encoder;
 
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    if ((nv_connector->type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        drm_dp_cec_set_edid(&nv_connector->aux, nv_connector->edid);
+    }
+#endif
+
     if (nv_connector->type == NVKMS_CONNECTOR_TYPE_DVI_I) {
         drm_object_property_set_value(
             &connector->base,
@@ -310,6 +386,14 @@ static enum drm_connector_status __nv_drm_connector_detect_internal(
     }
 
 done:
+
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    if ((status == connector_status_disconnected) &&
+        (nv_connector->type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        drm_dp_cec_unset_edid(&nv_connector->aux);
+    }
+#endif
 
     nv_drm_free(pDetectParams);
 
@@ -907,6 +991,15 @@ nv_drm_connector_new(struct drm_device *dev,
     nv_connector->modeset_permission_crtc = NULL;
     nv_connector->cp = NVKMS_CONTENT_PROTECTION_OFF;
 
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    if ((type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        nv_connector->aux.drm_dev = dev;
+        nv_connector->aux.transfer = nv_drm_dp_aux_transfer;
+        drm_dp_aux_init(&nv_connector->aux);
+    }
+#endif
+
     strcpy(nv_connector->dpAddress, dpAddress);
 
     ret = drm_connector_init(
@@ -1031,6 +1124,16 @@ nv_drm_connector_new(struct drm_device *dev,
             nv_connector->physicalIndex);
         goto failed_connector_register;
     }
+
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    if ((type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        nv_connector->aux.dev = nv_connector->base.kdev;
+        nv_connector->aux.name = nv_connector->base.name;
+        drm_dp_cec_register_connector(&nv_connector->aux,
+                                      &nv_connector->base);
+    }
+#endif
 
     return &nv_connector->base;
 

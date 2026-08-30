@@ -436,6 +436,7 @@ namespace DisplayPort
             virtual void notifyHDCPCapDone(Device * dev, bool hdcpCap) = 0;         // Notification that device's HDCP cap detection is done and get state change.
             virtual void notifyHDCPEnabled(Device * dev, bool hdcpEnabled) { };     // Notification that HDCP ECF is enabled
             virtual void notifyMCCSEvent(Device * dev) = 0;                         // Notification that an MCCS event is coming
+            virtual void notifyCECEvent(Device * dev) = 0;                          // Notification that a CEC-over-AUX IRQ is pending
         };
 
         // Query current Device topology

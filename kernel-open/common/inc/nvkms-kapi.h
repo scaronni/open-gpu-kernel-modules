@@ -244,6 +244,23 @@ struct NvKmsKapiStaticDisplayInfo {
     NvBool isDpMST;
 };
 
+#define NVKMS_KAPI_DP_AUX_MAX_DATA_SIZE 16
+
+enum NvKmsKapiDpAuxReply {
+    NVKMS_KAPI_DP_AUX_REPLY_ACK,
+    NVKMS_KAPI_DP_AUX_REPLY_NACK,
+    NVKMS_KAPI_DP_AUX_REPLY_DEFER,
+};
+
+struct NvKmsKapiDpAuxTransferParams {
+    NvKmsKapiDisplay display;
+    NvU32 address;
+    NvBool write;
+    NvU8 size;
+    NvU8 data[NVKMS_KAPI_DP_AUX_MAX_DATA_SIZE];
+    enum NvKmsKapiDpAuxReply reply;
+};
+
 struct NvKmsKapiSyncParams {
     union {
         struct {
@@ -531,6 +548,7 @@ struct NvKmsKapiEvent {
 
     union {
         struct NvKmsKapiEventDisplayChanged displayChanged;
+        struct NvKmsKapiEventDisplayChanged dpCecIrq;
         struct NvKmsKapiEventDynamicDisplayConnected dynamicDisplayConnected;
         struct NvKmsKapiEventFlipOccurred flipOccurred;
         struct NvKmsKapiEventDisplayCpChanged displayCpChanged;
@@ -1697,6 +1715,13 @@ struct NvKmsKapiFunctionsTable {
         struct NvKmsKapiDevice *device,
         const NvU32 head,
         struct NvKmsKapiVblankIntrCallback *pCallback);
+
+    /* Perform a native AUX transaction on an SST DisplayPort display. */
+    NvBool (*dpAuxTransfer)
+    (
+        struct NvKmsKapiDevice *device,
+        struct NvKmsKapiDpAuxTransferParams *params
+    );
 };
 
 /** @} */

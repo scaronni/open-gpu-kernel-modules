@@ -53,6 +53,7 @@ public:
     virtual void notifyHDCPCapDone(DisplayPort::Device *dev, bool hdcpCap);
     virtual void notifyHDCPEnabled(DisplayPort::Device *dev, bool hdcpEnabled);
     virtual void notifyMCCSEvent(DisplayPort::Device *dev);
+    virtual void notifyCECEvent(DisplayPort::Device *dev);
 };
 
 const char *nvDPGetDeviceGUIDStr(DisplayPort::Device *device);
