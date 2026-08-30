@@ -64,6 +64,9 @@ void nv_drm_handle_display_cp_topology_change(struct nv_drm_device *nv_dev,
                                               NvKmsKapiDisplay hDisplay,
                                               const void *topology);
 
+void nv_drm_handle_dp_cec_irq(struct nv_drm_device *nv_dev,
+                              NvKmsKapiDisplay hDisplay);
+
 void nv_drm_handle_dynamic_display_connected(struct nv_drm_device *nv_dev,
                                              NvKmsKapiDisplay hDisplay);
 

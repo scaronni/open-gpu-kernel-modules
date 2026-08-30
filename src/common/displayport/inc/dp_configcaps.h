@@ -467,6 +467,7 @@ namespace DisplayPort
         virtual void             clearInterruptContentProtection() = 0;
 
         virtual bool             intteruptMCCS() = 0;
+        virtual bool             interruptCEC() = 0;
         virtual void             clearInterruptMCCS() = 0;
 
         virtual bool             interruptDownReplyReady() = 0;
@@ -743,6 +744,7 @@ namespace DisplayPort
             bool      automatedTestRequest;
             bool      cpIRQ;
             bool      mccsIRQ;
+            bool      cecIRQ;
             bool      downRepMsgRdy;
             bool      upReqMsgRdy;
             bool      prErrorStatus;                                // DPCD offset 2004h[3]
@@ -1238,6 +1240,11 @@ namespace DisplayPort
         virtual bool intteruptMCCS()
         {
             return interrupts.mccsIRQ;
+        }
+
+        virtual bool interruptCEC()
+        {
+            return interrupts.cecIRQ;
         }
 
         virtual void clearInterruptMCCS();

@@ -557,6 +557,15 @@ void ConnectorEventSink::notifyMCCSEvent(DisplayPort::Device *dev)
 {
 }
 
+void ConnectorEventSink::notifyCECEvent(DisplayPort::Device *dev)
+{
+    NVDpyEvoPtr pDpyEvo = FindDpyByDevice(pConnectorEvo, dev);
+
+    if (pDpyEvo != NULL) {
+        nvSendDpyEventEvo(pDpyEvo, NVKMS_EVENT_TYPE_DP_CEC_IRQ);
+    }
+}
+
 }; // namespace nvkmsDisplayPort
 
 // The functions below are exported to the rest of nvkms.  Declare them outside

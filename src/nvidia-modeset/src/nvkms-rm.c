@@ -1462,81 +1462,113 @@ static void ProbeVRRCaps(NVDispEvoPtr pDispEvo)
 }
 
 
-static NvBool ReadDPCDReg(NVConnectorEvoPtr pConnectorEvo,
-                          NvU32 dpcdAddr,
-                          NvU8 *dpcdData)
+NvBool nvRmDpAuxTransfer(NVConnectorEvoPtr pConnectorEvo,
+                         NvU32 address,
+                         NvBool write,
+                         NvU8 *data,
+                         NvU8 size,
+                         enum NvRmDpAuxReply *pReply,
+                         NvU8 *pTransferred)
 {
     NV0073_CTRL_DP_AUXCH_CTRL_PARAMS params = { };
     NVDevEvoPtr pDevEvo = pConnectorEvo->pDispEvo->pDevEvo;
+    NvU32 status;
+    NvU8 retries = 0;
+
+    if ((size == 0U) || (size > NV0073_CTRL_DP_AUXCH_MAX_DATA_SIZE) ||
+        (data == NULL) || (pReply == NULL) || (pTransferred == NULL)) {
+        return FALSE;
+    }
 
     params.displayId = nvDpyIdToNvU32(pConnectorEvo->displayId);
 
     params.cmd = DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_TYPE, _AUX);
-    params.cmd |= DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _READ);
+    params.cmd |= write ?
+        DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _WRITE) :
+        DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _READ);
 
-    params.addr = dpcdAddr;
+    params.addr = address;
+    params.size = size - 1U;
 
-    /* Requested size is 0-based */
-    params.size = 0;
+    if (write) {
+        nvkms_memcpy(params.data, data, size);
+    }
 
-    if (nvRmApiControl(nvEvoGlobal.clientHandle,
-                       pDevEvo->displayCommonHandle,
-                       NV0073_CTRL_CMD_DP_AUXCH_CTRL,
-                       &params, sizeof(params)) != NVOS_STATUS_SUCCESS) {
-        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
-                    "AUX read failed for DPCD addr 0x%x",
-                    dpcdAddr);
+    do {
+        params.retryTimeMs = 0;
+        status = nvRmApiControl(nvEvoGlobal.clientHandle,
+                                pDevEvo->displayCommonHandle,
+                                NV0073_CTRL_CMD_DP_AUXCH_CTRL,
+                                &params, sizeof(params));
+        retries++;
+
+        if ((status != NVOS_STATUS_SUCCESS) &&
+            (params.retryTimeMs != 0U) && (retries < 3U)) {
+            nvkms_usleep(params.retryTimeMs * 1000U);
+        }
+    } while ((status != NVOS_STATUS_SUCCESS) &&
+             (params.retryTimeMs != 0U) && (retries < 3U));
+
+    if (status == NVOS_STATUS_ERROR_TIMEOUT) {
+        *pReply = NV_RM_DP_AUX_REPLY_DEFER;
+        *pTransferred = 0U;
+        return TRUE;
+    }
+
+    if (status != NVOS_STATUS_SUCCESS) {
         return FALSE;
     }
 
-    if (params.size != 1U) {
-        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
-                    "AUX read returned 0 bytes for DPCD addr 0x%x",
-                    dpcdAddr);
-        return FALSE;
+    switch (params.replyType) {
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_ACK:
+        *pReply = NV_RM_DP_AUX_REPLY_ACK;
+        *pTransferred = NV_MIN(params.size, size);
+        break;
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_DEFER:
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_I2CDEFER:
+        *pReply = NV_RM_DP_AUX_REPLY_DEFER;
+        *pTransferred = 0U;
+        break;
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_NACK:
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_I2CNACK:
+    case NV0073_CTRL_DP_AUXCH_REPLYTYPE_TIMEOUT:
+    default:
+        *pReply = NV_RM_DP_AUX_REPLY_NACK;
+        *pTransferred = 0U;
+        break;
     }
 
-    *dpcdData = params.data[0];
+    if (!write && (*pTransferred != 0U)) {
+        nvkms_memcpy(data, params.data, *pTransferred);
+    }
 
     return TRUE;
+}
+
+static NvBool ReadDPCDReg(NVConnectorEvoPtr pConnectorEvo,
+                          NvU32 dpcdAddr,
+                          NvU8 *dpcdData)
+{
+    enum NvRmDpAuxReply reply;
+    NvU8 transferred;
+
+    return nvRmDpAuxTransfer(pConnectorEvo, dpcdAddr, FALSE,
+                             dpcdData, 1U, &reply, &transferred) &&
+           (reply == NV_RM_DP_AUX_REPLY_ACK) &&
+           (transferred == 1U);
 }
 
 NvBool nvWriteDPCDReg(NVConnectorEvoPtr pConnectorEvo,
                       NvU32 dpcdAddr,
                       NvU8 dpcdData)
 {
-    NV0073_CTRL_DP_AUXCH_CTRL_PARAMS params = { };
-    NVDevEvoPtr pDevEvo = pConnectorEvo->pDispEvo->pDevEvo;
+    enum NvRmDpAuxReply reply;
+    NvU8 transferred;
 
-    params.displayId = nvDpyIdToNvU32(pConnectorEvo->displayId);
-
-    params.cmd = DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_TYPE, _AUX);
-    params.cmd |= DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _WRITE);
-
-    params.addr = dpcdAddr;
-    params.data[0] = dpcdData;
-
-    /* Requested size is 0-based */
-    params.size = 0;
-
-    if (nvRmApiControl(nvEvoGlobal.clientHandle,
-                       pDevEvo->displayCommonHandle,
-                       NV0073_CTRL_CMD_DP_AUXCH_CTRL,
-                       &params, sizeof(params)) != NVOS_STATUS_SUCCESS) {
-        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
-                    "AUX write failed for DPCD addr 0x%x",
-                    dpcdAddr);
-        return FALSE;
-    }
-
-    if (params.size != 1U) {
-        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
-                    "Wrote 0 bytes for DPCD addr 0x%x",
-                    dpcdAddr);
-        return FALSE;
-    }
-
-    return TRUE;
+    return nvRmDpAuxTransfer(pConnectorEvo, dpcdAddr, TRUE,
+                             &dpcdData, 1U, &reply, &transferred) &&
+           (reply == NV_RM_DP_AUX_REPLY_ACK) &&
+           (transferred == 1U);
 }
 
 enum NvKmsContentProtection nvGetContentProtectionState(const NVDpyEvoRec *pDpyEvo)

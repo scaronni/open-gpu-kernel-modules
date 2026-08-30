@@ -1816,6 +1816,56 @@ static NvBool QueryDpyDynamicData(struct NvKmsPerOpen *pOpen,
     return nvDpyGetDynamicData(pDpyEvo, pParams);
 }
 
+static NvBool DpAuxTransfer(struct NvKmsPerOpen *pOpen,
+                            void *pParamsVoid)
+{
+    struct NvKmsDpAuxTransferParams *pParams = pParamsVoid;
+    NVDpyEvoPtr pDpyEvo;
+    enum NvRmDpAuxReply rmReply;
+    NvU8 transferred;
+
+    pDpyEvo = GetPerOpenDpy(pOpen,
+                            pParams->request.deviceHandle,
+                            pParams->request.dpyId);
+    if ((pDpyEvo == NULL) ||
+        !nvConnectorUsesDPLib(pDpyEvo->pConnectorEvo) ||
+        nvDpyEvoIsDPMST(pDpyEvo) ||
+        (pParams->request.size == 0U) ||
+        (pParams->request.size > NVKMS_DP_AUX_MAX_DATA_SIZE)) {
+        return FALSE;
+    }
+
+    nvkms_memset(&pParams->reply, 0, sizeof(pParams->reply));
+    nvkms_memcpy(pParams->reply.data, pParams->request.data,
+                 pParams->request.size);
+
+    if (!nvRmDpAuxTransfer(pDpyEvo->pConnectorEvo,
+                           pParams->request.address,
+                           pParams->request.write,
+                           pParams->reply.data,
+                           pParams->request.size,
+                           &rmReply,
+                           &transferred)) {
+        return FALSE;
+    }
+
+    switch (rmReply) {
+    case NV_RM_DP_AUX_REPLY_ACK:
+        pParams->reply.reply = NVKMS_DP_AUX_REPLY_ACK;
+        pParams->reply.size = transferred;
+        break;
+    case NV_RM_DP_AUX_REPLY_DEFER:
+        pParams->reply.reply = NVKMS_DP_AUX_REPLY_DEFER;
+        break;
+    case NV_RM_DP_AUX_REPLY_NACK:
+    default:
+        pParams->reply.reply = NVKMS_DP_AUX_REPLY_NACK;
+        break;
+    }
+
+    return TRUE;
+}
+
 /* Store a copy of the user's infoString pointer, so we can copy out to it when
  * we're done. */
 struct InfoStringExtraUserStateCommon
@@ -4932,6 +4982,7 @@ NvBool nvKmsIoctl(
         ENTRY(NVKMS_IOCTL_QUERY_CONNECTOR_DYNAMIC_DATA, QueryConnectorDynamicData),
         ENTRY(NVKMS_IOCTL_QUERY_DPY_STATIC_DATA, QueryDpyStaticData),
         ENTRY(NVKMS_IOCTL_QUERY_DPY_DYNAMIC_DATA, QueryDpyDynamicData),
+        ENTRY(NVKMS_IOCTL_DP_AUX_TRANSFER, DpAuxTransfer),
         ENTRY_CUSTOM_USER(NVKMS_IOCTL_VALIDATE_MODE_INDEX, ValidateModeIndex),
         ENTRY_CUSTOM_USER(NVKMS_IOCTL_VALIDATE_MODE, ValidateMode),
         ENTRY_CUSTOM_USER(NVKMS_IOCTL_SET_MODE, SetMode),
@@ -6410,6 +6461,11 @@ static void SendDpyEventEvo(const NVDpyEvoRec *pDpyEvo,
             } else {
                 nvGetContentProtectionTopology(pDpyEvo->pConnectorEvo, pDpyEvo->pConnectorEvo->cpTopology);
             }
+            break;
+
+        case NVKMS_EVENT_TYPE_DP_CEC_IRQ:
+            event.u.dpCecIrq.deviceHandle = deviceHandle;
+            event.u.dpCecIrq.dpyId = pDpyEvo->id;
             break;
 
         case NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED:

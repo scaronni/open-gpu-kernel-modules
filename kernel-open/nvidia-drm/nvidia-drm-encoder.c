@@ -343,6 +343,25 @@ out:
     mutex_unlock(&dev->mode_config.mutex);
 }
 
+void nv_drm_handle_dp_cec_irq(struct nv_drm_device *nv_dev,
+                              NvKmsKapiDisplay hDisplay)
+{
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    struct drm_device *dev = nv_dev->dev;
+    struct nv_drm_encoder *nv_encoder;
+
+    mutex_lock(&dev->mode_config.mutex);
+    nv_encoder = get_nv_encoder_from_nvkms_display(dev, hDisplay);
+    mutex_unlock(&dev->mode_config.mutex);
+
+    if ((nv_encoder != NULL) &&
+        (nv_encoder->nv_connector->type == NVKMS_CONNECTOR_TYPE_DP) &&
+        (nvKms->dpAuxTransfer != NULL)) {
+        drm_dp_cec_irq(&nv_encoder->nv_connector->aux);
+    }
+#endif
+}
+
 void nv_drm_handle_dynamic_display_connected(struct nv_drm_device *nv_dev,
                                              NvKmsKapiDisplay hDisplay)
 {

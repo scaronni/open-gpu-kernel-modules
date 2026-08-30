@@ -784,6 +784,7 @@ namespace DisplayPort
         bool handleCPIRQ();
         void handleSSC();
         void handleMCCSIRQ();
+        void handleCECIRQ();
         void handleDpTunnelingIrq();
         void handleHdmiLinkStatusChanged();
         void sortActiveGroups(bool ascending);

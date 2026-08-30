@@ -33,6 +33,10 @@
 
 #include <drm/drm_connector.h>
 
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+#include <drm/display/drm_dp_helper.h>
+#endif
+
 #include "nvtypes.h"
 #include "nvkms-api-types.h"
 
@@ -65,6 +69,10 @@ struct nv_drm_connector {
     struct drm_property_blob *hdcp_topology_blob;
 
     atomic_t connection_status_dirty;
+
+#if defined(NV_DRM_DISPLAY_DRM_DP_HELPER_H_PRESENT)
+    struct drm_dp_aux aux;
+#endif
 
     /**
      * @modeset_permission_filep:
