@@ -103,6 +103,7 @@ typedef struct
     NvU32  peak_throughput_mode0; // peak throughput supported by the sink for 444 and simple 422 modes. 
     NvU32  peak_throughput_mode1; // peak throughput supported by the sink for native 422 and 420 modes.
     NvU32  eDP;                   // 1 = connector type is eDP, 0 otherwise. 
+    NvU32  force_dsc11_rc_params; // 1 = use VESA DSC 1.1 Table E-5 RC parameters at 8bpc/8.0bpp
 } DSC_INPUT_PARAMS;
 
 //output pps parameters after calculation
@@ -781,6 +782,7 @@ DSC_PpsCalcScaleInterval
 /*
  * @brief Calculate RC parameters
  *
+ * @param[in]       in    DSC input parameter
  * @param[in/out]   out   DSC output parameter
  *
  * @returns NVT_STATUS_SUCCESS if successful;
@@ -789,6 +791,7 @@ DSC_PpsCalcScaleInterval
 static NvU32
 DSC_PpsCalcRcParam
 (
+    const DSC_INPUT_PARAMS *in,
     DSC_OUTPUT_PARAMS *out
 )
 {
@@ -973,6 +976,27 @@ DSC_PpsCalcRcParam
                 {
                     out->range_bpg_offset[i] = ofs_und15[i];
                 }
+            }
+        }
+
+        //
+        // Sink WAR for RGB 8bpc at 8.0bpp: use the RC range parameters from
+        // VESA DSC 1.1 Table E-5 (prior to the DSC 1.1 E1 SCR) instead of the
+        // C model values above. Some DSC decoders (e.g. Bigscreen Beyond) show
+        // block artifacts with the C model values.
+        //
+        if (in->force_dsc11_rc_params && out->convert_rgb && !out->native_420 &&
+            (bpcm8 == 0) && (bitsPerPixel == 8 * BPP_UNIT))
+        {
+            const NvU32 minqp_dsc11[] = { 0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 13 };
+            const NvU32 maxqp_dsc11[] = { 4, 4, 5, 6, 7, 7, 7, 8, 9, 10, 11, 12, 13, 13, 15 };
+            const int ofs_dsc11[] = { 2, 0, 0, -2, -4, -6, -8, -8, -8, -10, -10, -12, -12, -12, -12 };
+
+            for (i = 0; i < NUM_BUF_RANGES; i++)
+            {
+                out->range_min_qp[i] = minqp_dsc11[i];
+                out->range_max_qp[i] = maxqp_dsc11[i];
+                out->range_bpg_offset[i] = ofs_dsc11[i];
             }
         }
     }
@@ -1886,7 +1910,7 @@ DSC_PpsCalc
     if (ret != NVT_STATUS_SUCCESS) return ret;
     ret = Dsc_PpsCalcHeight(in, out);
     if (ret != NVT_STATUS_SUCCESS) return ret;
-    ret = DSC_PpsCalcRcParam(out);
+    ret = DSC_PpsCalcRcParam(in, out);
     return ret;
 }
 
@@ -2785,6 +2809,7 @@ _DSC_GeneratePPS
             }
         }
         in->eDP = (pWARData->dpData.bIsEdp == NV_TRUE) ? 1 : 0;
+        in->force_dsc11_rc_params = (pWARData->dpData.bForceDsc11RcParams == NV_TRUE) ? 1 : 0;
     }
 
     if (in->native_422)

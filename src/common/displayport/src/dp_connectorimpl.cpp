@@ -2180,6 +2180,7 @@ bool ConnectorImpl::compoundQueryAttachMSTDsc(Group * target,
     warData.dpData.hBlank = modesetParams.modesetInfo.rasterWidth - modesetParams.modesetInfo.surfaceWidth;
     warData.connectorType = DSC_DP;
     warData.dpData.bDisableDscMaxBppLimit = bDisableDscMaxBppLimit;
+    warData.dpData.bForceDsc11RcParams = dev->getForceDsc11RcParams();
 
     //
     // Dplib needs to pass sliceCountMask to clients
@@ -2621,6 +2622,7 @@ bool ConnectorImpl::compoundQueryAttachSSTDsc
     warData.dpData.dpMode = DSC_DP_SST;
     warData.connectorType = DSC_DP;
     warData.dpData.bDisableDscMaxBppLimit = bDisableDscMaxBppLimit;
+    warData.dpData.bForceDsc11RcParams = nativeDev->getForceDsc11RcParams();
 
     if (main->isEDP())
     {

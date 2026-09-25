@@ -175,6 +175,7 @@ namespace DisplayPort
             bool bDP2XPreferNonDSCForLowPClk;
             bool bSkipCableIdCheck;
             bool bAllocateManualTimeslots;
+            bool bForceDsc11RcParams;     // Use VESA DSC 1.1 Table E-5 RC parameters at 8bpc/8.0bpp
         }_WARFlags;
 
         _WARFlags WARFlags;

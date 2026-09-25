@@ -427,6 +427,7 @@ namespace DisplayPort
         bool getStuffDummySymbolsFor128b132b() const { return processedEdid.WARData.bStuffDummySymbolsFor128b132b; }
         bool getStuffDummySymbolsFor8b10b() const { return processedEdid.WARData.bStuffDummySymbolsFor8b10b; }
         bool getApplyStuffDummySymbolsWAR() const { return processedEdid.WARFlags.bApplyStuffDummySymbolsWAR; }
+        bool getForceDsc11RcParams() const { return processedEdid.WARFlags.bForceDsc11RcParams; }
 
         virtual void queryGUID2();
 
