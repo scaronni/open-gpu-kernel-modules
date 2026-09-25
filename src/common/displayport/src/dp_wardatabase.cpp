@@ -577,6 +577,13 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
                 //
                 this->WARFlags.forceMaxLinkConfig = true;
                 DP_PRINTF(DP_NOTICE, "DP-WAR> Force maximum link config for Bigscreen Beyond VR headset.");
+
+                //
+                // The DSC decoder shows block artifacts with the C model RC
+                // parameters at 8bpc/8.0bpp. Use VESA DSC 1.1 Table E-5 ones.
+                //
+                this->WARFlags.bForceDsc11RcParams = true;
+                DP_PRINTF(DP_NOTICE, "DP-WAR> Force DSC 1.1 RC parameters for Bigscreen Beyond VR headset.");
             }
             break;
 
