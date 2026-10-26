@@ -46,6 +46,10 @@
 #include <linux/iommu.h>
 #include <linux/kthread.h>
 
+#if NV_CHECK_EXPORT_SYMBOL(userspace_init_fs)
+#include <linux/fs_struct.h>
+#endif
+
 #if defined(NV_SEQ_READ_ITER_PRESENT)
 #include <linux/seq_file.h>
 #include <linux/kernfs.h>
@@ -526,7 +530,19 @@ static void nv_get_pci_sysfs_config
                    NV_PCI_SLOT_NUMBER(pci_dev));
     if (ret > 0 && ret < sizeof(filename))
     {
-        struct file *file = filp_open(filename, O_RDONLY, 0);
+        struct file *file;
+
+#if NV_CHECK_EXPORT_SYMBOL(userspace_init_fs)
+        /*
+         * Since Linux 7.3, kthreads start in an empty nullfs and path
+         * lookups from them fail. Probe runs in one (the async probe worker
+         * or nv-probe-*), so look the file up in init's root instead.
+         */
+        scoped_with_init_fs()
+            file = filp_open(filename, O_RDONLY, 0);
+#else
+        file = filp_open(filename, O_RDONLY, 0);
+#endif
         if (!IS_ERR(file))
         {
 #if defined(NV_SEQ_READ_ITER_PRESENT)
