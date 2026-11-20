@@ -3144,14 +3144,6 @@ static NvBool NvKmsKapiPrimaryLayerConfigToKms(
         changed = TRUE;
     }
 
-    if (layerRequestedConfig->flags.srcXYChanged || bFromKmsSetMode) {
-        params->viewPortIn.point.x = layerConfig->srcX;
-        params->viewPortIn.point.y = layerConfig->srcY;
-        params->viewPortIn.specified = NV_TRUE;
-
-        changed = TRUE;
-    }
-
     if (layerRequestedConfig->flags.dstXYChanged || bFromKmsSetMode) {
         params->layer[NVKMS_MAIN_LAYER].outputPosition.val.x = layerConfig->dstX;
         params->layer[NVKMS_MAIN_LAYER].outputPosition.val.y = layerConfig->dstY;
