@@ -62,6 +62,51 @@
 
 extern int NVreg_ExcludeAllGpus;
 
+#ifndef PCI_EXP_LNKCTL2_HASD
+#define PCI_EXP_LNKCTL2_HASD 0x0020
+#endif
+
+/*
+ * Link speed changes initiated by the GPU can take the link down behind some
+ * Thunderbolt bridges. Disable them on both ends before GSP starts.
+ */
+static void
+nv_pci_lock_link_speed(
+    nv_state_t *nv,
+    struct pci_dev *pci_dev
+)
+{
+    struct pci_dev *upstream = pci_upstream_bridge(pci_dev);
+#if NV_IS_EXPORT_SYMBOL_GPL_pcie_set_target_speed
+    enum pci_bus_speed speed, gpu_speed;
+    int ret;
+#endif
+
+    if ((upstream == NULL) || !pci_is_thunderbolt_attached(pci_dev))
+        return;
+
+    pcie_capability_set_word(pci_dev, PCI_EXP_LNKCTL2, PCI_EXP_LNKCTL2_HASD);
+    pcie_capability_set_word(upstream, PCI_EXP_LNKCTL2, PCI_EXP_LNKCTL2_HASD);
+
+#if NV_IS_EXPORT_SYMBOL_GPL_pcie_set_target_speed
+    /* The GPU can no longer raise a lower link speed, retrain from the bridge. */
+    speed = pcie_get_speed_cap(upstream);
+    gpu_speed = pcie_get_speed_cap(pci_dev);
+    if (gpu_speed < speed)
+        speed = gpu_speed;
+
+    if (speed == PCI_SPEED_UNKNOWN)
+        return;
+
+    ret = pcie_set_target_speed(upstream, speed, true);
+    if (ret != 0)
+    {
+        NV_DEV_PRINTF(NV_DBG_ERRORS, nv,
+                      "Failed to retrain the PCIe link (%d)\n", ret);
+    }
+#endif
+}
+
 static void
 nv_check_and_exclude_gpu(
     nvidia_stack_t *sp,
@@ -1533,6 +1578,8 @@ nv_pci_probe_body
         goto err_add_device;
     }
     UNLOCK_NV_LINUX_DEVICES();
+
+    nv_pci_lock_link_speed(nv, pci_dev);
 
     if (nvl->init_on_probe && !(nv->flags & NV_FLAG_EXCLUDE))
     {
